@@ -1,17 +1,40 @@
 import discord
 import os
 from discord.ext import commands
-import youtube
+import music
+import config
 import ffmpeg
 
-TOKEN = 'OTUzOTc5MzMxMzU1NDg4Mjg2.YjMcfA.WP7Z7ewwCqc55UHy7Uig3WgZBcI'
 
 
-cogs = [youtube]
+def main():
 
-client = commands.Bot(command_prefix='!', intents = discord.Intents.all())
+	cogs = [music]
+	client = commands.Bot(command_prefix='!', intents = discord.Intents.all())
 
-for i in range(len(cogs)):
-  cogs[i].setup(client)
+	for i in range(len(cogs)):
+		cogs[i].setup(client)
 
-client.run(TOKEN)
+
+	print('Fubot is now live...')
+	client.run(config.TOKEN)
+
+
+
+if __name__ == "__main__":
+	main()
+
+
+	'''
+
+To do:
+Play Now (Skipp + add first)
+
+
+Add Dedicated Channel for the BOT.
+Add Lyrics Command
+Standard Message Dictionary
+
+Add Spotify Support
+
+'''
