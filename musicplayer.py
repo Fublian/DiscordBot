@@ -5,7 +5,7 @@ from async_timeout import timeout
 
 class MusicPlayer():
 
-	__slots__ = ('bot', '_guild', '_channel', '_cog', 'queue', 'next', 'now_playing', 'current', 'volume')
+	__slots__ = ('bot', '_guild', '_channel', '_cog', 'queue', 'next', 'now_playing', 'lyrics','current', 'volume')
 
 	def __init__(self, ctx):
 	    self.bot = ctx.bot
@@ -17,6 +17,8 @@ class MusicPlayer():
 	    self.next = asyncio.Event()
 
 	    self.now_playing = None
+	    self.lyrics = None
+
 	    self.current = None
 	    self.volume = .5
 
@@ -87,7 +89,6 @@ class MusicPlayer():
 			except:
 				pass
 		return history
-
 
 	def generate_embed(self, source, status):
 		if not source:

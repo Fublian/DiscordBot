@@ -43,6 +43,7 @@ class YTSource(discord.PCMVolumeTransformer):
 		self.views = data.get('view_count')
 		self.thumbnail = data.get('thumbnails')[0]
 		self.author = get_author_(self.web_url)
+		self.type = 'youtube'
 
 
 	def __getitem__(self, item: str):

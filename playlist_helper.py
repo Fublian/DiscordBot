@@ -9,30 +9,35 @@ import asyncio
 import nest_asyncio
 import config
 
-DOMAINS = ['www.youtube.com', 'open.spotify.com']
+DOMAINS = config.DOMAINS
 
 def evaluate_search(phrase):
 	parsed = urlparse(phrase)
+	netloc = parsed[1]
+
+	if not netloc:
+		netloc = DOMAINS[0]	#Youtube as default
+
 	url_obj = {
-		'domain': DOMAINS[0],	#Youtube as default
+		'domain': netloc,
 		'url': False,
 		'playlist': False,
 		'playlist_url': None
 	}
+
 	# No valid URL, search default youtube
-	if not parsed[1] or parsed[1] not in DOMAINS:
+	if not parsed[1] and  parsed[1] not in DOMAINS:
 		return url_obj
 
 	# URL is valid and it is part of our DOMAINS
-	url_obj['domain'] = parsed[1]
 	url_obj['url'] = True
 
 	try:
-		if url_obj['domain'] == DOMAINS[0]:
+		if url_obj['domain'] == DOMAINS[0]: ## www.youtube.com 
 			if parse_qs(parsed.query)['list'][0]:
 				url_obj['playlist'] = True
 				url_obj['playlist_url'] = parse_qs(parsed.query)['list'][0]
-		elif url_obj['domain'] == DOMAINS[1]:
+		elif url_obj['domain'] == DOMAINS[1]: ##  open.spotify.com
 			if parsed[2].startswith('/playlist'):
 				url_obj['playlist'] = True
 				url_obj['playlist_url'] = phrase
@@ -78,35 +83,39 @@ async def create_sources(ctx, player, urls, loop, download):
 		sources.append(source)
 	return sources
 
-def generate_yt_playlist_ebmeded(playlist, length, playlist_url):
+def generate_yt_playlist_ebmeded(playlist, length, playlist_url, is_playing = True):
+
+	if not is_playing:
+		playlist[0]['title'] += ' (now playing...)'
 
 	longest = len(max([song['title'] for song in playlist], key=len))
 
 	fmt_queue = '\n'.join(f'**` {i+1}. {song["title"]+(longest-len(song["title"]))*" "}   `**' for i, song in enumerate(playlist))
 	if length > 5:
-		#fmt_queue += '   \n\u2022 \u2022 \u2022'
 		fmt_queue += f'\n**` \u22EE `**\n'
 
 	pl_info = get_playlist_info(playlist_url)
-	pl_embed = discord.Embed(title=f"Queuing Playlist - {pl_info['title']}", url=pl_info['playlist_url'],color=0xCC0000, description=fmt_queue)
-	pl_embed.set_thumbnail(url=pl_info['thumbnail'])
+	if pl_info:
+		pl_embed = discord.Embed(title=f"Queuing Playlist - {pl_info['title']}", url=pl_info['playlist_url'],color=0xCC0000, description=fmt_queue)
+		pl_embed.set_thumbnail(url=pl_info['thumbnail'])
 
-	pl_embed.set_author(name=pl_info['channel_name'], url=pl_info['channel_url'], icon_url=pl_info['channel_icon_url'])
-	pl_embed.set_footer(text=f'{len(playlist)} of {length} in total')
-	return pl_embed
+		pl_embed.set_author(name=pl_info['channel_name'], url=pl_info['channel_url'], icon_url=pl_info['channel_icon_url'])
+		pl_embed.set_footer(text=f'{len(playlist)} of {length} in total')
+		return pl_embed
+	return None
 
 
 def get_playlist_info(playlist_url):
-	#try:
-	yt = pytube.Playlist(playlist_url)
-	pl_info = {}
-	pl_info['title'] = yt.title
-	pl_info['playlist_url'] = "https://www.youtube.com/playlist?list="+yt.playlist_id
-	pl_info['thumbnail'] = yt.initial_data['microformat']['microformatDataRenderer']['thumbnail']['thumbnails'][0]['url']
-	pl_info['channel_name'] = yt.owner
-	pl_info['channel_url'] = yt.owner_url
-	ch = pytube.Channel(yt.owner_url)
-	pl_info['channel_icon_url'] = ch.initial_data['header']['c4TabbedHeaderRenderer']['avatar']['thumbnails'][0]['url']
-	return pl_info
-	#except:
-	#	return None
+	try:
+		yt = pytube.Playlist(playlist_url)
+		pl_info = {}
+		pl_info['title'] = yt.title
+		pl_info['playlist_url'] = "https://www.youtube.com/playlist?list="+yt.playlist_id
+		pl_info['thumbnail'] = yt.initial_data['microformat']['microformatDataRenderer']['thumbnail']['thumbnails'][0]['url']
+		pl_info['channel_name'] = yt.owner
+		pl_info['channel_url'] = yt.owner_url
+		ch = pytube.Channel(yt.owner_url)
+		pl_info['channel_icon_url'] = ch.initial_data['header']['c4TabbedHeaderRenderer']['avatar']['thumbnails'][0]['url']
+		return pl_info
+	except:
+		return None

@@ -22,6 +22,7 @@ from functools import partial
 from  musicplayer import MusicPlayer
 from yt_source import YTSource
 import playlist_helper as ph
+import lyrics_helper as lh
 
 class VoiceConnectionError(commands.CommandError):
 	"""Custom Exception Class"""
@@ -57,11 +58,10 @@ class Music(commands.Cog):
 			raise commands.NoPrivateMessage
 		return True
 
-
 	async def __error(self, ctx, error):
 		if isinstance(error, commands.NoPrivateMessage):
 			try:
-				return await ctx.send('Test This command can no be used in Private Messages.')
+				return await ctx.send('This command can no be used in Private Messages.')
 			except discord.HTTPException:
 				pass
 		elif isinstance(error, InvalidVoiceChannel):
@@ -107,20 +107,26 @@ class Music(commands.Cog):
 			try:
 				await channel.connect()
 			except asyncio.TimeoutError:
-				raise VoiceConnectionError(f'Moving to channel: <{channel}> timed out.')
+				raise VoiceConnectionError(f'Connecting to channel: <{channel}> timed out.')
 
 		await ctx.send(f'Connected to: **{channel}**', delete_after=20)
 	
+
 
 	@commands.command(name='play')
 	async def play_(self, ctx, *, search: str):
 
 		url_obj = ph.evaluate_search(search)
-		
 
-		if url_obj['domain'] != 'www.youtube.com':
+		if url_obj['domain'] == 'www.youtube.com':
+			print('youtube')
+		elif url_obj['domain'] == 'open.spotify.com':
+			print('spotify')
+		else:
 			await ctx.send(f'fubot does not support the source **{url_obj["domain"]}**', delete_after=20) 
 			return
+
+
 
 
 		await ctx.trigger_typing()
@@ -129,13 +135,17 @@ class Music(commands.Cog):
 
 		if not vc:
 			await ctx.invoke(self.connect_)
+			is_playing = False
+		else:
+			is_playing = vc.is_playing()
 
 		player = self.get_player(ctx)
-
-		source = await YTSource.create_source(ctx, search, loop = self.client.loop, download=False)
-
-		await player.queue.put(source)
-
+		try:
+			source = await YTSource.create_source(ctx, search, loop = self.client.loop, download=False)
+			await player.queue.put(source)
+		except Exception:
+			await ctx.send(f'fubot was not able to find any video matching **{search}**', delete_after=20) 
+			return
 		
 		if url_obj['playlist']:
 			await ctx.send(f'```ini\n[fetching playlist data]\n```', delete_after=5)
@@ -147,16 +157,20 @@ class Music(commands.Cog):
 				await player.queue.put(s)
 
 			# Generate embeded with the fist 5 songs added in the playlist
-			embed = ph.generate_yt_playlist_ebmeded(sources, length, search)
+			embed = ph.generate_yt_playlist_ebmeded(sources, length, search, is_playing)
+			if embed:
+				await ctx.send(embed=embed)
 
-			await ctx.send(embed=embed)
+				if len(playlist) > 5:
+					# Add the rest quietly after
+					sources = await ph.create_sources(ctx, player, playlist[5:], loop = self.client.loop, download=False)
+					for s in sources:
+						await player.queue.put(s)
+				await ctx.send(f'```ini\n[Completed adding playlist to the Queue]\n```', delete_after=10)
+			else:
+				await ctx.send(f'```ini\n[Could not retrieve play list information]\n```', delete_after=10)
 
-			if len(playlist) > 5:
-				# Add the rest quietly after
-				sources = await ph.create_sources(ctx, player, playlist[5:], loop = self.client.loop, download=False)
-				for s in sources:
-					await player.queue.put(s)
-			await ctx.send(f'```ini\n[Completed adding playlist to the Queue]\n```', delete_after=10)
+
 
 	@commands.command(name='play-next', aliases=['queue-next','put-next', 'top'])
 	async def play_next_(self, ctx, *, search: str):
@@ -193,19 +207,35 @@ class Music(commands.Cog):
 
 
 
-	@commands.command(name='empty', aliases=['empty-queue', 'clear', 'clear-queue'])
-	async def empty_queue_(self, ctx):
+	@commands.command(name='play-now', aliases=['playnow'])
+	async def play_now_(self, ctx, *, search: str):
+		url_obj = ph.evaluate_search(search)
+
+		if url_obj['domain'] != 'www.youtube.com':
+			await ctx.send(f'fubot does not support the source **{url_obj["domain"]}**', delete_after=20) 
+			return
+
+		await ctx.trigger_typing()
+
 		vc = ctx.voice_client
 
-		if not vc or not vc.is_connected():
-			return await ctx.send('I am not currently playing anything!', delete_after=20)
+		if not vc:
+			await ctx.invoke(self.connect_)
 
 		player = self.get_player(ctx)
+		source = await YTSource.create_source(ctx, search, loop = self.client.loop, download=False, quiet = True)
+
 		history = player.empty_queue()
-		if len(history):
-			await ctx.send(f'**`{ctx.author}`**: Cleared the Queue! ({len(history)} tracks removed)')
-		else:
-			await ctx.send(f'The Queue is alredy Empty!')
+
+		await player.queue.put(source)
+		await self.skip_(ctx, quiet=True)
+
+		for s in history:
+			await player.queue.put(s)
+
+		
+		if url_obj['playlist']:
+			await ctx.send(f'fubot does not support playlist for this action.', delete_after=20) 
 
 
 
@@ -220,7 +250,7 @@ class Music(commands.Cog):
 
 		player = self.get_player(ctx)
 		if not player.current:
-			return await ctx.send('I am not currently playing anything!')
+			return await ctx.send('I am not currently playing anything!', delete_after=20)
 
 
 		try:
@@ -249,7 +279,7 @@ class Music(commands.Cog):
 
 		player = self.get_player(ctx)
 		if not player.current:
-			return await ctx.send('I am not currently playing anything!')
+			return await ctx.send('I am not currently playing anything!', delete_after=20)
 
 		try:
 			## Try to remove currently playing message
@@ -264,11 +294,14 @@ class Music(commands.Cog):
 		player.now_playing = await ctx.send(embed=embed)
 
 
+
 	@commands.command(name='skip', aliases=['next'])
-	async def skip_(self, ctx):
+	async def skip_(self, ctx, quiet=False):
 		vc = ctx.voice_client
 
 		if not vc or not vc.is_connected():
+			if (quiet):
+				return
 			return await ctx.send('I am not currently playing anything!', delete_after=20)
 
 		if vc.is_paused():
@@ -277,7 +310,10 @@ class Music(commands.Cog):
 			return
 
 		vc.stop()
-		await ctx.send(f'**`{ctx.author}`**: Skipped the song!')
+		if not quiet:
+			await ctx.send(f'**`{ctx.author}`**: Skipped the song!', delete_after=20)
+	
+
 
 	@commands.command(name='queue', aliases=['q','playlist'])
 	async def queue_info_(self, ctx):
@@ -288,7 +324,7 @@ class Music(commands.Cog):
 
 		player = self.get_player(ctx)
 		if player.queue.empty():
-			return await ctx.send('There are currently no more queued songs.')
+			return await ctx.send('There are currently no more queued songs.', delete_after=20)
 
 		## Grabs the first 5 Queued Songs
 		upcoming = list(itertools.islice(player.queue._queue, 0, 5))
@@ -308,6 +344,23 @@ class Music(commands.Cog):
 		await ctx.send(embed=embed)
 
 
+
+	@commands.command(name='empty', aliases=['empty-queue', 'clear', 'clear-queue'])
+	async def empty_queue_(self, ctx):
+		vc = ctx.voice_client
+
+		if not vc or not vc.is_connected():
+			return await ctx.send('I am not currently playing anything!', delete_after=20)
+
+		player = self.get_player(ctx)
+		history = player.empty_queue()
+		if len(history):
+			await ctx.send(f'**`{ctx.author}`**: Cleared the Queue! ({len(history)} tracks removed)')
+		else:
+			await ctx.send(f'The Queue is alredy Empty!', delete_after=20)
+
+
+
 	@commands.command(name='now_playing', aliases=['np', 'current', 'playing', 'now-play','now'])
 	async def now_playing_(self, ctx):
 		vc = ctx.voice_client
@@ -317,7 +370,7 @@ class Music(commands.Cog):
 
 		player = self.get_player(ctx)
 		if not player.current:
-			return await ctx.send('I am not currently playing anything!')
+			return await ctx.send('I am not currently playing anything!', delete_after=20)
 
 		try:
 			## Try to remove currently playing message
@@ -331,6 +384,31 @@ class Music(commands.Cog):
 		embed = player.generate_embed(player.current, status)
 
 		player.now_playing = await ctx.send(embed=embed)
+
+
+
+	@commands.command(name='upcoming', aliases=['up-next'])
+	async def upcoming(self, ctx):
+		vc = ctx.voice_client
+
+		if not vc or not vc.is_connected():
+			return await ctx.send('I am not currently connected to voice!', delete_after=20)
+
+		player = self.get_player(ctx)
+		if not player.current:
+			return await ctx.send('The Queue is empty, there are no upcoming song.', delete_after=20)
+
+		
+		## Attempts to grab the next song in queue
+		try :
+			upcoming = list(itertools.islice(player.queue._queue, 0, 1))[0]
+			description = f'[**`{upcoming["title"]}`**]({upcoming["webpage_url"]})'
+			embed = discord.Embed(title=f'Upcoming Track', description=description)
+
+			await ctx.send(embed=embed)
+		except IndexError:
+			return await ctx.send('The Queue is empty, there are no upcoming song.', delete_after=20)
+		
 
 
 
@@ -360,211 +438,67 @@ class Music(commands.Cog):
 
 		await self.cleanup(ctx.guild)
 
+
+
+	@commands.command(name='lyrics', aliases=['lyric','text'])
+	async def lyrics_(self, ctx):
+		vc = ctx.voice_client
+
+		if not vc or not vc.is_connected():
+			return await ctx.send('I am not currently playing anything!', delete_after=20)
+
+		player = self.get_player(ctx)
+
+		if not player.current:
+			return await ctx.send('I am not currently playing anything!', delete_after=20)
+
+		resend = None
+
+		try:
+			if player.lyrics:
+				# Check if we send Lyrics Commands twice for the same song
+				# Then we can just resend the message rather then doing another API Call
+
+				current_url = player.lyrics.embeds[0].to_dict()['url']
+				if current_url == player.current['web_url']:
+					resend = player.lyrics.embeds[0]
+				await player.lyrics.delete()
+		except discord.HTTPException:
+			pass		
+
+		if resend:
+			player.lyrics = await ctx.send(embed=resend)
+		else:
+			msg = await ctx.send(f'```ini\n[Looking for Lyrics...]\n```', delete_after=10)
+			lyrics = lh.get_lyrics(player.current['web_url'])
+
+
+			if lyrics:
+				await msg.edit(content=f'```ini\n[Found Lyrics, preparing message!]\n```', delete_after=5)
+				embed = lh.generate_lyrics_ebmeded(lyrics, player.current['thumbnail'], 
+					player.current['author'], player.current['web_url'])
+				player.lyrics = await ctx.send(embed=embed)
+			else:
+				await ctx.send("Sorry, I Could not find the lyrics for the current track", delete_after=20)
+
+
+	@commands.command(name='kanye', aliases=['quote', 'west', 'tips'])
+	async def kanye_(self, ctx):
+		url = 'https://api.kanye.rest'
+		icon_url = 'https://www.pngkit.com/png/full/15-159514_music-stars-kanye-west-face-png.png'
+		shop_url = 'https://shop.kanyewest.com/products/donda-album'
+		try:
+			response = requests.get(url)
+			quote = json.loads(response.text)['quote']
+		except:
+			quote = "Kanye is resting..."
+
+		kanye_embed = discord.Embed(title="\u200b", color=0x000000, description=f'{quote}')
+		kanye_embed.set_author(name="Kanye West", url='https://twitter.com/kanyewest', icon_url=icon_url)
+		kanye_embed.add_field(name='\u200b',value =f'[DONDA!]({shop_url})')
+		await ctx.send(embed=kanye_embed)
+
+
 def setup(client):
 	client.add_cog(Music(client))
 
-
-	'''
-
-	@commands.command()
-	async def disc(self, ctx):
-		bot_channel = discord.utils.get(self.client.get_all_channels(), name=config.BOT_CHANNEL_NAME)
-		if ctx.voice_client is None:
-			await bot_channel.send(f"{self.client.user.name} is not connected to any voice channel...")
-		else:
-			await ctx.voice_client.disconnect()
-
-
-
-
-	@commands.Cog.listener()
-	async def on_voice_state_update(self, member, before, after):
-	# Make sure we triggered the event
-	if not member.id == self.client.user.id:
-		return
-
-	# Check if it was a Join event
-	elif before.channel is None:
-		voice = after.channel.guild.voice_client
-		time = 0
-		while True:
-		await asyncio.sleep(1)
-		time = time + 1
-		#if voice.is_playing() and not voice.is_paused():
-		if voice.is_playing() or voice.is_paused():
-			time = 0
-
-		current_msg = self.get_playing_msg_id()
-
-		if not voice.is_playing() and not voice.is_paused() and current_msg and time > 4:
-			try:
-			self.set_playing_msg_id(None)
-			new_embed = edit_embed(current_msg.embeds[0], description="Finished")
-			await current_msg.edit(embed=new_embed)
-
-			except:
-			print("coudn't update message")
-
-		if time == config.INACTIVITY_TIMER:
-			await voice.disconnect()
-		if not voice.is_connected():
-			break
-
-
-
-
-	
-
-	
-
-
-	def set_playing_msg_id(self, msg_id):
-		self._playing_msg_id = msg_id
-
-
-	def get_playing_msg_id(self):
-		return self._playing_msg_id
-
-
-	 @commands.command()
-	 async def join(self, ctx):
-	bot_channel = discord.utils.get(self.client.get_all_channels(), name=config.BOT_CHANNEL_NAME)
-	if ctx.author.voice is None:
-		await bot_channel.send("You are not connected to any voice channel...")
-	else:
-		voice_channel = ctx.author.voice.channel
-		if ctx.voice_client is None:
-		await voice_channel.connect()
-		else:
-		await ctx.voice_client.move_to(voice_channel)
-
-
-
-	@commands.command(name='play', aliases=['spela'])
-	async def play_(self, ctx, *, args = None):
-	bot_channel = discord.utils.get(self.client.get_all_channels(), name=config.BOT_CHANNEL_NAME)
-	if ctx.voice_client is None:
-		await self.join(ctx)
-	if ctx.voice_client is not None:
-		domain = find_domain(args)
-		url = fix_url(args, domain)
-		if url is not None:
-
-		embed_msg = create_embed(url, domain)
-		msg_id = await bot_channel.send(embed = embed_msg)
-
-		self.set_playing_msg_id(msg_id)
-
-		ctx.voice_client.stop()
-		FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-		YDL_OPTIONS = {'format': 'bestaudio/best'}
-
-		with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-			info = ydl.extract_info(url,download=False)
-			url2 = info['url']
-			source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
-			ctx.voice_client.play(source)
-		
-		else:
-		await bot_channel.send("Unable to find video...")
-
-
-
-
-
-
-	@commands.command()
-	async def pause(self, ctx):
-		try:
-			bot_channel = discord.utils.get(self.client.get_all_channels(), name=config.BOT_CHANNEL_NAME)
-			if ctx.voice_client.is_playing():
-
-				current_msg = self.get_playing_msg_id()
-				new_embed = edit_embed(current_msg.embeds[0], description="Paused")
-				await current_msg.edit(embed=new_embed)
-
-				ctx.voice_client.pause()
-			else:
-				print('Nothing to pause...')
-		except:
-			print("No active voice_client found")
-
-
-	
-
-
-	@commands.command()
-	async def resume(self, ctx):
-		try:
-			bot_channel = discord.utils.get(self.client.get_all_channels(), name=config.BOT_CHANNEL_NAME)
-			if ctx.voice_client.is_paused():
-
-				current_msg = self.get_playing_msg_id()
-				new_embed = edit_embed(current_msg.embeds[0], description="Now playing...")
-				await current_msg.edit(embed=new_embed)
-
-				ctx.voice_client.resume()
-			else:
-				print('Nothing to resume...')
-		except:
-			print("No active voice_client found")
-
-
-def edit_embed(embed, **kwargs):
-
-	if "title" in kwargs: 
-		title = kwargs.get("title")
-	else:
-		title = embed.title
-
-	if "url" in kwargs: 
-		url = kwargs.get("url")
-	else:
-		url = embed.url
-
-	if "color" in kwargs: 
-		color = kwargs.get("color")
-	else:
-		color = embed.color
-
-	if "description" in kwargs: 
-		description = kwargs.get("description")
-	else:
-		description = embed.description
-
-	new_embed = discord.Embed(title=title, url=url, color=color, description=description)
-	new_embed.set_thumbnail(url=embed.thumbnail.url)
-	new_embed.set_author(name=embed.author.name, url=embed.author.url, icon_url=embed.author.icon_url)
-	new_embed.set_footer(text=embed.footer.text)
-	return new_embed
-
-
-def find_domain(url):
-	domains = ['youtube']
-	domain = 'youtube' ## Default Domain (Search will be done on youtube)
-	for dom in domains:
-		if dom in url:
-			domain = dom
-	return domain
-
-def fix_url(url, domain = 'youtube'):
-	if url:
-		if validators.url(url) and domain in url:
-			return url
-		if url.find("www.") > -1 and domain in url:
-			new_url = "https://" + url[url.find("www."):]
-			if validators.url(new_url):
-				return new_url
-		new_url = youtube_search(url)
-		if new_url:
-			return 'https://www.youtube.com' + new_url
-	return None
-
-
-def youtube_search(phrase):
-	results = YoutubeSearch(phrase, max_results=1).to_dict()
-	if len(results) > 0:
-		return results[0]['url_suffix']
-
-
-'''
