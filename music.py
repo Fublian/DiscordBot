@@ -39,6 +39,7 @@ class Music(commands.Cog):
 		self.client = client
 		self._playing_msg_id = None
 		self.players = {}
+		self.commands = getCommandsInfo()
 
 	async def cleanup(self, guild):
 		try:
@@ -50,7 +51,6 @@ class Music(commands.Cog):
 			del self.players[guild.id]
 		except KeyError:
 			pass
-
 
 	async def __local_check(self, ctx):
 		if not ctx.guild:
@@ -112,7 +112,7 @@ class Music(commands.Cog):
 	
 
 
-	@commands.command(name='play')
+	@commands.command(name='play', aliases=['p'])
 	async def play_(self, ctx, *, search: str):
 
 		url_obj = ph.evaluate_search(search)
@@ -124,7 +124,6 @@ class Music(commands.Cog):
 		else:
 			await ctx.send(f'fubot does not support the source **{url_obj["domain"]}**', delete_after=20) 
 			return
-
 
 		await ctx.trigger_typing()
 
@@ -168,17 +167,14 @@ class Music(commands.Cog):
 				await ctx.send(f'```ini\n[Could not retrieve play list information]\n```', delete_after=10)
 
 
-
 	@commands.command(name='play-next', aliases=['queue-next','put-next', 'top'])
 	async def play_next_(self, ctx, *, search: str):
 
 		url_obj = ph.evaluate_search(search)
-		
 
 		if url_obj['domain'] != 'www.youtube.com':
 			await ctx.send(f'fubot does not support the source **{url_obj["domain"]}**', delete_after=20) 
 			return
-
 
 		await ctx.trigger_typing()
 
@@ -249,7 +245,6 @@ class Music(commands.Cog):
 		if not player.current:
 			return await ctx.send('I am not currently playing anything!', delete_after=20)
 
-
 		try:
 			## Try to remove currently playing message
 			await player.now_playing.delete()
@@ -272,7 +267,6 @@ class Music(commands.Cog):
 			return await ctx.send('I am not currently playing anything!', delete_after=20)
 		elif not vc.is_paused():
 			return
-
 
 		player = self.get_player(ctx)
 		if not player.current:
@@ -407,8 +401,6 @@ class Music(commands.Cog):
 			return await ctx.send('The Queue is empty, there are no upcoming song.', delete_after=20)
 		
 
-
-
 	@commands.command(name='volume', aliases=['vol'])
 	async def change_volume_(self, ctx, *, vol: float):
 		vc = ctx.voice_client
@@ -495,6 +487,27 @@ class Music(commands.Cog):
 		kanye_embed.add_field(name='\u200b',value =f'[DONDA!]({shop_url})')
 		await ctx.send(embed=kanye_embed)
 
+
+
+	@commands.command(name='help', aliases=['h', 'bot', 'commands', 'info', 'fubot'])
+	async def help_(self, ctx):
+		help_embed = discord.Embed(title='Command Information',color=0x242526, 
+			description='Fubot does not have a dedicated channel, fubot will respond in the channel where you send the commands. All commands use (!) as a prefix.\u200B')
+		help_embed.add_field(name='\u200B', value = '\u200B')
+		for com in self.commands:
+			help_embed.add_field(name = com['name'], value = com['description'], inline = False)
+
+		help_embed.set_author(name="Fubot", url="", icon_url=ctx.guild.icon_url)
+		help_embed.add_field(name='\u200b', value=f'For more information check out the [github](https://github.com/Fublian/DiscordBot)')
+		await ctx.send(embed=help_embed)
+
+def getCommandsInfo():
+	try:
+		with  open('music_commands.json') as f:
+			data = json.load(f)
+		return data['commands']
+	except:
+		return []
 
 def setup(client):
 	client.add_cog(Music(client))

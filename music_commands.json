@@ -1,0 +1,64 @@
+{
+  "commands": [
+    {
+      "name": "!join",
+      "description": "Connect/Join Fubot to your current Channel"
+    },
+    {
+      "name": "!play",
+      "description": "Adds a track to the end of the Queue. Takes either a URL or Search Term as arguments"
+    },
+    {
+      "name": "!play-next",
+      "description": "Same as !play but adds the track to the first position in the Queue."
+    },
+    {
+      "name": "!play-now",
+      "description": "Same as !play-next but also skips currently playing song"
+    },
+    {
+      "name": "!pause",
+      "description": "Pause the current track"
+    },
+    {
+      "name": "!resume",
+      "description": "Resume playing the current track"
+    },
+    {
+      "name": "!stop",
+      "description": "Clears out the Queue, stop the current track and disconnect bot from current Channel"
+    },
+    {
+      "name": "!skip",
+      "description": "Skipp the current track and starts playing the next track Queued"
+    },
+    {
+      "name": "!clear",
+      "description": "Clears the current Queue"
+    },
+    {
+      "name": "!queue",
+      "description": "Prints out a list of the current Queue"
+    },
+    {
+      "name": "!now-playing",
+      "description": "Prints out information about the current track"
+    },
+    {
+      "name": "!upcoming",
+      "description": "Prints out the upcoming track"
+    },
+    {
+      "name": "!volume",
+      "description": "Allows user to change the bots global volume. Takes a number between 0 and 100 (%) as an argument"
+    },
+    {
+      "name": "!lyrics",
+      "description": "Attempts to retrieve and print the lyrics for the current track"
+    },
+    {
+      "name": "!kanye",
+      "description": "Kanye share his wisdom"
+    }
+  ]
+}

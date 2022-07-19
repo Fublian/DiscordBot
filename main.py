@@ -11,7 +11,7 @@ filter_excs = (commands.CommandNotFound, commands.CheckFailure, commands.Channel
 def main():
 
 	cogs = [music]
-	client = commands.Bot(command_prefix='!', intents=discord.Intents.all(), case_insensitive=True)
+	client = commands.Bot(command_prefix='!', help_command=None, intents=discord.Intents.all(), case_insensitive=True)
 
 	for i in range(len(cogs)):
 		cogs[i].setup(client)
@@ -39,13 +39,12 @@ def main():
 	print('Fubot is now live...')
 	client.run(config.TOKEN)
 
-
-
 if __name__ == "__main__":
 	main()
 
 
-	'''
+
+'''
 
 To do:
 	Standard Message Dictionary
@@ -55,3 +54,4 @@ To do:
 	Add Youtube Music
 
 '''
+
