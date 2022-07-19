@@ -6,6 +6,7 @@ from lyricsgenius import Genius
 import config
 import discord
 
+
 token = config.GENIUS_TOKEN
 
 def get_lyrics(url):

@@ -27,7 +27,9 @@ def main():
 	async def on_command_error(ctx: commands.Context, exc: Exception):
 		if isinstance(exc, filter_excs):
 			return
-
+		if isinstance(exc, commands.MissingRequiredArgument):
+			return await ctx.send('Missing url or search term...', delete_after=20)
+		
 		# Log the error and bug the owner.
 		exc = getattr(exc, 'original', exc)
 		#lines = ''.join(traceback.format_exception(exc.__class__, exc, exc.__traceback__))

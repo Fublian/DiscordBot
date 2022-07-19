@@ -104,3 +104,4 @@ class MusicPlayer():
 
 	def destroy(self, guild):
 		return self.bot.loop.create_task(self._cog.cleanup(guild))
+

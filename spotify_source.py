@@ -6,5 +6,4 @@ import json
 
 import config
 
-
 import spotify

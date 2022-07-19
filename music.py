@@ -31,7 +31,6 @@ class InvalidVoiceChannel(Exception):
 	pass
 	"""Custom Exception Class"""
 
-
 class Music(commands.Cog):
 
 	__slots__ = ('client', 'players')
@@ -120,13 +119,11 @@ class Music(commands.Cog):
 
 		if url_obj['domain'] == 'www.youtube.com':
 			print('youtube')
-		elif url_obj['domain'] == 'open.spotify.com':
-			print('spotify')
+		#elif url_obj['domain'] == 'open.spotify.com':
+		#	print('spotify')
 		else:
 			await ctx.send(f'fubot does not support the source **{url_obj["domain"]}**', delete_after=20) 
 			return
-
-
 
 
 		await ctx.trigger_typing()
